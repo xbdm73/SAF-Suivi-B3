@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SAF Hélicoptères – Suivi AS 350 B3</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#0D1B2A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Suivi B3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -242,6 +247,9 @@ header .org{margin:2px 0 0;color:var(--ink-2);font-size:13px}
 #night .exform .fld{display:grid;gap:3px;font-size:12px;color:var(--ink-2)}
 #night .exlist{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:4px;font-size:13px}
 #night .exlist li{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#night .pushbox{border:1px solid var(--line);border-radius:6px;padding:12px 14px;background:rgba(255,255,255,.025);max-width:80ch}
+#night .pushbox p{margin:0 0 8px;font-size:13.5px}
+#night .pushbox .acts{margin-top:6px}
 #night .msg{font-size:12.5px;margin-top:6px;min-height:1em} #night .msg.err{color:var(--lost)} #night .msg.ok{color:var(--live)}
 @media (max-width:760px){ #night .nbar,#night .nbody{padding-left:14px;padding-right:14px} }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -275,6 +283,7 @@ header .org{margin:2px 0 0;color:var(--ink-2);font-size:13px}
       <button id="fit" type="button">Toute la flotte</button>
       <button id="histbtn" type="button">Historique des vols</button>
       <button id="nightbtn" type="button">Bases et nuit</button>
+      <button id="pushbtn" type="button">Alertes téléphone</button>
        <button id="terrainbtn" type="button" aria-expanded="false">Profil relief / AGL</button>
       <button id="pwdbtn" type="button">Mot de passe</button>
       <button id="logout" type="button">Déconnexion</button>
@@ -1330,14 +1339,16 @@ function isMissingTable(err){ return /PGRST205|PGRST202|42P01|42703|does not exi
 async function loadNight(){
   if(night.off) return;
   const day=todayLocal(), from=dayShift(day,-1);
-  const [b,a,c,x,ed]=await Promise.all([
+  const [b,a,c,x,ed,pp]=await Promise.all([
     sb.from("fleet_bases").select("*").order("name"),
     sb.from("fleet_aircraft").select("reg,home_base,alt_bases,in_maintenance"),
     sb.from("fleet_night_checks").select("*").gte("night_date",from),
     sb.from("fleet_night_exceptions").select("*").gte("night_date",from).order("night_date"),
     fleetAdmin?sb.from("fleet_b3_users").select("*").order("email"):Promise.resolve({data:[]}),
+    fleetEditor?sb.rpc("fleet_push_people"):Promise.resolve({data:[]}),
   ]);
   const bad=[b,a,c,x].find(r=>r.error);
+  night.push=(pp&&!pp.error&&pp.data)||[];
   if(bad){ if(isMissingTable(bad.error)){ night.off=true; document.getElementById("nightbtn").hidden=true; return; } throw bad.error; }
   night.bases=b.data||[]; night.asg=Object.fromEntries((a.data||[]).map(r=>[r.reg,r]));
   night.checks=c.data||[]; night.ex=x.data||[]; night.editors=ed.data||[]; night.loaded=true;
@@ -1391,6 +1402,7 @@ function parseCoord(v){
 const fmtC=x=>x==null?"":(+x).toFixed(6);
 
 function openNight(){
+  if(pushSub===null && pushSupported() && !openNight.checked){ openNight.checked=true; pushState().then(()=>{ const b=document.getElementById("pushbox"); if(b) b.innerHTML=pushBoxHTML(); }).catch(()=>{}); }
   if(!night.loaded){ loadNight().then(()=>{ if(night.loaded) openNight(); }); return; }
   renderNight(); document.getElementById("night").hidden=false;
   document.getElementById("n-who").textContent=`${userEmail} · ${canEdit()?"modification autorisée":"lecture seule"}`;
@@ -1403,6 +1415,7 @@ function renderNight(){
   const act=night.bases.filter(b=>b.active);
   const b3=fleet.slice().sort((x,y)=>x.reg.localeCompare(y.reg));
   let h=canEdit()?"":`<p class="ro">Lecture seule : les modifications sont réservées aux comptes autorisés par un administrateur.</p>`;
+  h+=`<h3 id="n-push">Alertes sur ce téléphone</h3><div class="pushbox" id="pushbox">${pushBoxHTML()}</div>`;
   h+=`<h3>Appareils</h3><p class="hint">Un appareil sans base d’affectation ou en maintenance n’est pas contrôlé. Les bases de repli sont acceptées tous les soirs ; une nuit hors base ne vaut que pour la date choisie.</p>
   <div class="scroll"><table><thead><tr><th>Appareil</th><th>Base d’affectation</th><th>Bases de repli</th><th>Maintenance</th><th>Ce soir</th><th></th></tr></thead><tbody>`;
   for(const a of b3){
@@ -1454,6 +1467,15 @@ function renderNight(){
     </tr>`;
   }
   h+=`</tbody></table></div>`;
+  if(canEdit()){
+    const people=night.push||[];
+    h+=`<h3>Destinataires des alertes sur téléphone</h3><p class="hint">Chaque personne active d’abord les alertes sur son téléphone (bloc « Alertes sur ce téléphone »). Cochez ici qui reçoit les alertes « non rentré à la nuit aéronautique ». Les e-mails d’alerte suivent leur propre liste.</p>
+    ${people.length?`<div class="scroll"><table style="min-width:560px"><thead><tr><th>Personne</th><th>Appareils</th><th>Dernière réception</th><th>Reçoit les alertes</th></tr></thead><tbody>
+    ${people.map(x=>`<tr data-pemail="${esc(x.email)}"><td>${esc(x.email)}</td><td>${x.devices}</td><td class="muted">${x.last_ok_at?new Date(x.last_ok_at).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Paris"}):"—"}</td><td><label class="chips"><input type="checkbox" class="precv"${x.night_alerts?" checked":""}> Oui</label><div class="msg"></div></td></tr>`).join("")}
+    </tbody></table></div>`:`<p class="hint">Aucun téléphone n’a encore activé les alertes.</p>`}
+    <h3>Simuler une alerte</h3><p class="hint">Envoie une alerte « non rentré » marquée TEST, avec la dernière position réelle de l’appareil, aux téléphones cochés ci-dessus et aux destinataires des e-mails. Le contrôle réel du soir n’est pas modifié.</p>
+    <div class="exform simrow"><label class="fld" style="display:grid;gap:3px;font-size:12px;color:var(--ink-2)">Appareil<select class="simreg">${b3.map(a=>`<option value="${esc(a.reg)}">${esc(a.reg)}</option>`).join("")}</select></label><button type="button" class="go simgo">Envoyer l’alerte de test</button></div><div class="msg simmsg"></div>`;
+  }
   if(isAdmin()){
     h+=`<h3>Utilisateurs du suivi B3</h3><p class="hint">Ces comptes ouvrent ce suivi sans aucun accès à SAF International : ils ne voient que les AS 350 B3. « Peut modifier » leur ouvre les bases, les affectations et les nuits hors base. Le compte de connexion se crée d’abord dans Supabase (Authentication, Users, Create new user). Les rôles SMS admin, editor et reader gardent leur accès sans figurer ici.</p>
     <div class="scroll"><table style="min-width:620px"><thead><tr><th>Adresse e-mail</th><th>Nom</th><th>Peut modifier</th><th>Ajouté par</th><th></th></tr></thead><tbody>
@@ -1477,6 +1499,12 @@ document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!document.getEleme
 document.getElementById("n-body").addEventListener("change",e=>{
   const t=e.target;
   if(t.classList.contains("explace")) syncExForm(t.closest("tr"));
+  if(t.classList.contains("precv")){
+    const tr=t.closest("tr"), email=tr.dataset.pemail; t.disabled=true;
+    sb.rpc("fleet_push_set_recipient",{p_email:email,p_on:t.checked}).then(({error})=>{
+      t.disabled=false; if(error){ t.checked=!t.checked; nMsg(tr,error.message,false); } else nMsg(tr,t.checked?"Recevra les alertes":"Ne recevra plus les alertes",true);
+    });
+  }
   if(t.classList.contains("home")){ // la base d'affectation ne peut pas être aussi base de repli
     t.closest("tr").querySelectorAll(".alt").forEach(c=>{ if(c.value===t.value) c.checked=false; });
   }
@@ -1494,9 +1522,26 @@ document.getElementById("n-body").addEventListener("click",async e=>{
     if(!ex.hidden) ex.querySelector(".exdate").focus();
     return;
   }
+  if(btn.classList.contains("pushon")||btn.classList.contains("pushoff")||btn.classList.contains("pushtest")){
+    btn.disabled=true;
+    try{
+      if(btn.classList.contains("pushon")) await pushEnable();
+      else if(btn.classList.contains("pushoff")) await pushDisable();
+      else await pushTest();
+    }catch(err){ pushMsg((err&&err.message)||String(err),false); }
+    finally{ if(document.body.contains(btn)) btn.disabled=false; }
+    return;
+  }
   if(!canEdit()) return;
   btn.disabled=true;
   try{
+    if(btn.classList.contains("simgo")){
+      const reg=document.querySelector("#n-body .simreg").value, m=document.querySelector("#n-body .simmsg");
+      const {data,error}=await sb.rpc("fleet_b3_test_alert",{p_reg:reg});
+      if(error) throw error;
+      m.textContent=`Alerte de test pour ${reg} envoyée (n° ${data}). Elle doit arriver dans les secondes qui suivent.`; m.className="msg simmsg ok";
+      return;
+    }
     if(btn.classList.contains("edsave")){
       const email=tr.querySelector(".edmail").value.trim().toLowerCase(), name=tr.querySelector(".edname").value.trim()||null;
       if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("Adresse e-mail invalide.");
@@ -1577,9 +1622,67 @@ document.getElementById("n-body").addEventListener("click",async e=>{
       return;
     }
   }catch(err){
+    if(btn.classList.contains("simgo")){ const m=document.querySelector("#n-body .simmsg"); m.textContent=(err&&err.message)||String(err); m.className="msg simmsg err"; return; }
     nMsg(tr,(err&&err.message)||String(err),false);
   }finally{ if(document.body.contains(btn)) btn.disabled=false; }
 });
+
+
+/* ---------- Alertes sur téléphone (Web Push, même principe que le Crew Training) ---------- */
+const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+const isStandalone=()=>window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+const pushSupported=()=>"serviceWorker" in navigator&&"PushManager" in window&&"Notification" in window;
+let swReg=null, pushSub=null;
+async function swReady(){
+  if(!("serviceWorker" in navigator)) return null;
+  if(!swReg){ try{ swReg=await navigator.serviceWorker.register("sw.js"); await navigator.serviceWorker.ready; }catch(e){ console.warn("Service worker :",e); return null; } }
+  return swReg;
+}
+async function pushState(){
+  if(!pushSupported()) return null;
+  const r=await swReady(); if(!r) return null;
+  pushSub=await r.pushManager.getSubscription(); return pushSub;
+}
+function b64ToBytes(b64){ const p="=".repeat((4-b64.length%4)%4), s=atob((b64+p).replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from([...s].map(c=>c.charCodeAt(0))); }
+function pushBoxHTML(){
+  if(isIOS&&!isStandalone()) return `<p>Sur iPhone, les alertes ne fonctionnent que depuis l’icône de l’écran d’accueil : dans Safari, touchez <b>Partager</b> puis <b>Sur l’écran d’accueil</b>, ouvrez « Suivi B3 » depuis cette icône, connectez-vous et revenez ici.</p>`;
+  if(!pushSupported()) return `<p>Ce navigateur ne gère pas les notifications. Utilisez Chrome, Edge ou Firefox, ou Safari depuis l’écran d’accueil sur iPhone.</p>`;
+  if(Notification.permission==="denied") return `<p>Les notifications sont bloquées pour ce site. Autorisez-les dans les réglages du navigateur (icône à gauche de l’adresse, ou Réglages, Notifications sur iPhone), puis rechargez la page.</p>`;
+  const on=!!pushSub;
+  return `<p>${on?"Ce téléphone reçoit les alertes « non rentré à la nuit aéronautique » (si un éditeur l’a coché comme destinataire).":"Ce téléphone ne reçoit pas encore les alertes."}</p>
+    <div class="acts">${on?`<button type="button" class="go pushtest">Envoyer un test</button><button type="button" class="pushoff">Désactiver sur ce téléphone</button>`:`<button type="button" class="go pushon">Activer les alertes sur ce téléphone</button>`}</div><div class="msg pushmsg"></div>`;
+}
+function pushMsg(t,ok){ const m=document.querySelector("#pushbox .pushmsg"); if(m){ m.textContent=t; m.className="msg pushmsg "+(ok?"ok":"err"); } }
+async function refreshPushBox(msg,ok){ await pushState(); const b=document.getElementById("pushbox"); if(b) b.innerHTML=pushBoxHTML(); if(msg) pushMsg(msg,ok); }
+async function pushEnable(){
+  const perm=await Notification.requestPermission();
+  if(perm!=="granted") throw new Error("Autorisation refusée : les alertes ne pourront pas s’afficher.");
+  const r=await swReady(); if(!r) throw new Error("Impossible d’installer le service de notification sur ce navigateur.");
+  const k=await sb.rpc("fleet_push_public_key"); if(k.error||!k.data) throw new Error("Clé de notification indisponible.");
+  const sub=await r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToBytes(k.data)});
+  const j=sub.toJSON();
+  const {error}=await sb.from("fleet_push_subscriptions").upsert({endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,user_agent:navigator.userAgent.slice(0,300)},{onConflict:"endpoint"});
+  if(error) throw error;
+  await refreshPushBox("Alertes activées. Envoyez un test pour vérifier.",true);
+  if(canEdit()){ await loadNight(); }
+}
+async function pushDisable(){
+  const s=await pushState();
+  if(s){ await sb.from("fleet_push_subscriptions").delete().eq("endpoint",s.endpoint); await s.unsubscribe().catch(()=>{}); }
+  await refreshPushBox("Alertes désactivées sur ce téléphone.",true);
+}
+async function pushTest(){
+  const {data:{session}}=await sb.auth.getSession();
+  const r=await fetch(`${CONFIG.url}/functions/v1/fleet-push`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`,apikey:CONFIG.key},body:"{}"});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||j.message||`Erreur ${r.status}`);
+  pushMsg(j.sent?`Test envoyé à ${j.sent} appareil${j.sent>1?"s":""} : la notification doit apparaître.`:"Aucun appareil joignable : désactivez puis réactivez les alertes.",!!j.sent);
+}
+document.getElementById("pushbtn").onclick=async()=>{
+  await pushState().catch(()=>{});
+  openNight();
+  setTimeout(()=>document.getElementById("n-push")?.scrollIntoView({block:"start"}),60);
+};
 
 /* ---------- Session : connexion intégrée (site indépendant de SAF International) ---------- */
 let timer=null, booted=false, loggingOut=false, recovering=false;
@@ -1610,7 +1713,7 @@ async function boot(){
   document.getElementById("who").textContent=`Connecté : ${userEmail} · ${fleetEditor?"bases et nuit modifiables":"lecture seule"}`;
   if(recovering) return;   // lien « mot de passe oublié » : saisir d'abord le nouveau mot de passe
   gateHide();
-  if(!booted){ booted=true; subscribeFleetPositions(); }
+  if(!booted){ booted=true; subscribeFleetPositions(); swReady(); }
   restartCycle();
 }
 document.getElementById("f-login").onsubmit=async e=>{
