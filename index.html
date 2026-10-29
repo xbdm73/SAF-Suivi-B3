@@ -299,8 +299,8 @@ header .org{margin:2px 0 0;color:var(--ink-2);font-size:13px}
       </select>
       <button id="fit" type="button">Toute la flotte</button>
       <button id="histbtn" type="button">Historique des vols</button>
-      <button id="nightbtn" type="button">Bases et nuit</button>
-      <button id="pushbtn" type="button">Alertes téléphone</button>
+      <button id="nightbtn" type="button" hidden>Bases et nuit</button>
+      <button id="pushbtn" type="button" hidden>Alertes téléphone</button>
        <button id="terrainbtn" type="button" aria-expanded="false">Profil relief / AGL</button>
       <button id="pwdbtn" type="button">Mot de passe</button>
       <button id="logout" type="button">Déconnexion</button>
@@ -1346,6 +1346,12 @@ function fitAll(){
    qu'afficher l'état et permettre aux rôles admin et editor de régler bases, affectations et nuits hors base. */
 let userEmail="", fleetEditor=false, fleetAdmin=false;
 const SHARED_READERS=["suivi-b3@saf-helico.com"];
+let lastBootEmail="";
+function resetNightPanel(){
+  const n=document.getElementById("night"); if(n) n.hidden=true;
+  const b=document.getElementById("n-body"); if(b) b.innerHTML="";
+  Object.assign(night,{loaded:false,bases:[],asg:{},checks:[],ex:[],editors:[],push:[],sig:""});
+}
 // Droits décidés par la base (fleet_b3_access) : rôles SMS, ou utilisateurs du suivi B3 (table fleet_b3_users)
 const canEdit=()=>fleetEditor;
 const isAdmin=()=>fleetAdmin;
@@ -1458,6 +1464,7 @@ function parseCoord(v){
 const fmtC=x=>x==null?"":(+x).toFixed(6);
 
 function openNight(){
+  if(!canEdit()){ document.getElementById("night").hidden=true; return; }
   if(pushSub===null && pushSupported() && !openNight.checked){ openNight.checked=true; pushState().then(()=>{ const b=document.getElementById("pushbox"); if(b) b.innerHTML=pushBoxHTML(); }).catch(()=>{}); }
   if(!night.loaded){ loadNight().then(()=>{ if(night.loaded) openNight(); }); return; }
   renderNight(); document.getElementById("night").hidden=false;
@@ -1740,6 +1747,7 @@ function pushBoxHTML(){
 function pushMsg(t,ok){ const m=document.querySelector("#pushbox .pushmsg"); if(m){ m.textContent=t; m.className="msg pushmsg "+(ok?"ok":"err"); } }
 async function refreshPushBox(msg,ok){ await pushState(); const b=document.getElementById("pushbox"); if(b) b.innerHTML=pushBoxHTML(); if(msg) pushMsg(msg,ok); }
 async function pushEnable(){
+  if(!canEdit()) throw new Error("Les alertes téléphone sont réservées aux comptes autorisés.");
   const perm=await Notification.requestPermission();
   if(perm!=="granted") throw new Error("Autorisation refusée : les alertes ne pourront pas s’afficher.");
   const r=await swReady(); if(!r) throw new Error("Impossible d’installer le service de notification sur ce navigateur.");
@@ -1764,6 +1772,7 @@ async function pushTest(){
   pushMsg(j.sent?`Test envoyé à ${j.sent} appareil${j.sent>1?"s":""} : la notification doit apparaître.`:"Aucun appareil joignable : désactivez puis réactivez les alertes.",!!j.sent);
 }
 document.getElementById("pushbtn").onclick=async()=>{
+  if(!canEdit()) return;
   await pushState().catch(()=>{});
   openNight();
   setTimeout(()=>document.getElementById("n-push")?.scrollIntoView({block:"start"}),60);
@@ -1793,7 +1802,12 @@ async function boot(){
   let acc=null;
   try{ const r=await sb.rpc("fleet_b3_access"); if(r.error) throw r.error; acc=r.data; }catch(e){ gate("Vérification des droits impossible : "+(e.message||e)); return; }
   if(!acc||!acc.access){ gate(`Le compte ${userEmail} n’a pas accès au suivi AS 350 B3. Demandez l’accès à un administrateur.`); return; }
+  // Changement de compte : on jette tout ce qui a été affiché avec les droits du compte précédent
+  if(userEmail.toLowerCase()!==lastBootEmail){ resetNightPanel(); lastBootEmail=userEmail.toLowerCase(); }
   fleetEditor=acc.edit===true; fleetAdmin=acc.admin===true;
+  // Lecteurs : ni « Bases et nuit », ni « Alertes téléphone »
+  document.getElementById("nightbtn").hidden=!fleetEditor||night.off;
+  document.getElementById("pushbtn").hidden=!fleetEditor;
   // Compte lecteur partagé : pas de changement de mot de passe (aussi bloqué côté Supabase)
   const sharedReader=SHARED_READERS.includes(userEmail.toLowerCase());
   document.getElementById("pwdbtn").hidden=sharedReader;
@@ -1832,6 +1846,7 @@ async function logout(){
   loggingOut=true; clearInterval(timer);
   try{ await Promise.race([sb.auth.signOut({scope:"local"}), new Promise(r=>setTimeout(r,3000))]); }catch(e){}
   try{ for(const st of [localStorage,sessionStorage]) Object.keys(st).filter(k=>/^sb-|supabase/i.test(k)).forEach(k=>st.removeItem(k)); }catch(e){}
+  fleetEditor=false; fleetAdmin=false; resetNightPanel(); lastBootEmail="";
   loggingOut=false; showLogin("Vous êtes déconnecté.");
 }
 document.getElementById("logout").onclick=logout;
