@@ -23,7 +23,14 @@ self.addEventListener("notificationclick", event => {
   const url = new URL((event.notification.data && event.notification.data.url) || "./", self.registration.scope).href;
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    for (const c of all) { if (c.url.startsWith(self.registration.scope)) { await c.focus(); return; } }
+    for (const c of all) {
+      if (c.url.startsWith(self.registration.scope)) {
+        await c.focus();
+        // page déjà ouverte : lui transmettre l'alerte à afficher (prise en compte)
+        c.postMessage({ alertUrl: url });
+        return;
+      }
+    }
     await self.clients.openWindow(url);
   })());
 });
