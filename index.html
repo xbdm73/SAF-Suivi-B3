@@ -1957,7 +1957,7 @@ function pushBoxHTML(){
   if(!pushSupported()) return `<p>Ce navigateur ne gère pas les notifications. Utilisez Chrome, Edge ou Firefox, ou Safari depuis l’écran d’accueil sur iPhone.</p>`;
   if(Notification.permission==="denied") return `<p>Les notifications sont bloquées pour ce site. Autorisez-les dans les réglages du navigateur (icône à gauche de l’adresse, ou Réglages, Notifications sur iPhone), puis rechargez la page.</p>`;
   const on=!!pushSub;
-  return `<p>${on?"Ce téléphone reçoit les notifications de stationnement hors base la nuit (si un éditeur l’a coché comme destinataire).":"Ce téléphone ne reçoit pas encore les alertes."}</p>
+  return `<p>${on?"Ce téléphone est activé : il reçoit les alertes si vous figurez dans « Destinataires des alertes » avec Téléphone coché.":"Ce téléphone ne reçoit pas encore les alertes."}</p>
     <div class="acts">${on?`<button type="button" class="go pushtest">Envoyer un test</button><button type="button" class="pushoff">Désactiver sur ce téléphone</button>`:`<button type="button" class="go pushon">Activer les alertes sur ce téléphone</button>`}</div><div class="msg pushmsg"></div>`;
 }
 function pushMsg(t,ok){ const m=document.querySelector("#pushbox .pushmsg"); if(m){ m.textContent=t; m.className="msg pushmsg "+(ok?"ok":"err"); } }
