@@ -1479,7 +1479,7 @@ function renderNight(){
   const b3=fleet.slice().sort((x,y)=>x.reg.localeCompare(y.reg));
   let h=canEdit()?"":`<p class="ro">Lecture seule : les modifications sont réservées aux comptes autorisés par un administrateur.</p>`;
   h+=`<h3 id="n-push">Alertes sur ce téléphone</h3><div class="pushbox" id="pushbox">${pushBoxHTML()}</div>`;
-  h+=`<h3>Appareils</h3><p class="hint">Un appareil sans base d’affectation ou en maintenance n’est pas contrôlé. Les bases de repli sont acceptées tous les soirs ; une nuit hors base ne vaut que pour la date choisie.</p>
+  h+=`<h3>Appareils</h3><p class="hint">Un appareil sans base d’affectation ou en maintenance n’est pas contrôlé. La base d’affectation est toujours acceptée : inutile de la cocher en base de repli. Les bases de repli sont acceptées tous les soirs ; une nuit hors base ne vaut que pour la date choisie.${canEdit()?" Les modifications sont enregistrées automatiquement.":""}</p>
   <div class="scroll"><table><thead><tr><th>Appareil</th><th>Base d’affectation</th><th>Bases de repli</th><th>Maintenance</th><th>Ce soir</th><th></th></tr></thead><tbody>`;
   for(const a of b3){
     const g=night.asg[a.reg]||{}, home=baseBy(g.home_base), last=state[a.reg]?.last||null;
@@ -1493,10 +1493,10 @@ function renderNight(){
     h+=`<tr data-reg="${esc(a.reg)}">
       <td><div class="reg">${esc(a.reg)}</div><div class="muted">${esc(a.type||"")}</div></td>
       <td><select class="home" aria-label="Base d’affectation de ${esc(a.reg)}"${dis}><option value="">Aucune</option>${act.map(b=>`<option value="${esc(b.code)}"${b.code===g.home_base?" selected":""}>${esc(b.name)}</option>`).join("")}</select></td>
-      <td><div class="chips">${act.map(b=>`<label><input type="checkbox" class="alt" value="${esc(b.code)}"${(g.alt_bases||[]).includes(b.code)?" checked":""}${dis}> ${esc(b.name)}</label>`).join("")}</div></td>
+      <td><div class="chips">${act.map(b=>`<label${b.code===g.home_base?' title="Base d’affectation : toujours acceptée"':""}><input type="checkbox" class="alt" value="${esc(b.code)}"${b.code===g.home_base||(g.alt_bases||[]).includes(b.code)?" checked":""}${b.code===g.home_base?" disabled data-home=\"1\"":dis}> ${esc(b.name)}</label>`).join("")}</div></td>
       <td><label class="chips"><input type="checkbox" class="maint"${g.in_maintenance?" checked":""}${dis}> En maintenance</label></td>
       <td>${st}</td>
-      <td><div class="acts"><button type="button" class="go save"${dis}>Enregistrer</button><button type="button" class="exbtn" aria-expanded="false">Nuit hors base${exs.length?` (${exs.length})`:""}</button></div><div class="msg"></div></td>
+      <td><div class="acts"><button type="button" class="go save" hidden${dis}>Enregistrer</button><button type="button" class="exbtn" aria-expanded="false">Nuit hors base${exs.length?` (${exs.length})`:""}</button></div><div class="msg"></div></td>
     </tr>
     <tr class="exrow" data-reg="${esc(a.reg)}" hidden><td colspan="6">
       <div class="exform">
@@ -1526,7 +1526,7 @@ function renderNight(){
       <td><input type="number" class="brad" value="${b.radius_m}" min="50" max="5000" step="50" aria-label="Rayon ${esc(b.name)}"${dis}></td>
       <td>${hm(ns)} UTC<div class="muted">${ns.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",timeZone:"Europe/Paris"})} heure française</div></td>
       <td><select class="snap" aria-label="Recaler ${esc(b.name)} sur la position d’un appareil"${dis}><option value="">—</option>${b3.filter(a=>state[a.reg]?.last).map(a=>{ const l=state[a.reg].last, d=haversineKm(l,b); return `<option value="${esc(a.reg)}">${esc(a.reg)} · ${d<1?Math.round(d*1000)+" m":d.toFixed(d<10?1:0)+" km"}</option>`; }).join("")}</select></td>
-      <td><div class="acts"><button type="button" class="go bsave"${dis}>Enregistrer</button><button type="button" class="bdel"${dis}>Supprimer</button></div><div class="msg"></div></td>
+      <td><div class="acts"><button type="button" class="go bsave" hidden${dis}>Enregistrer</button><button type="button" class="bdel"${dis}>Supprimer</button></div><div class="msg"></div></td>
     </tr>`;
   }
   h+=`<tr class="badd"><td><input type="text" class="banom" placeholder="Nom de la base" aria-label="Nom de la nouvelle base"${dis} style="width:150px"><div class="muted" style="margin-top:4px"><input type="text" class="bacode" placeholder="Code OACI (facultatif)" aria-label="Code OACI"${dis} style="width:150px"></div></td>
@@ -1549,7 +1549,7 @@ function renderNight(){
   if(isAdmin()){
     h+=`<h3>Utilisateurs du suivi B3</h3><p class="hint">Ces comptes ouvrent ce suivi sans aucun accès à SAF International : ils ne voient que les AS 350 B3. « Peut modifier » leur ouvre les bases, les affectations et les nuits hors base. Le compte de connexion se crée d’abord dans Supabase (Authentication, Users, Create new user). Les rôles SMS admin, editor et reader gardent leur accès sans figurer ici.</p>
     <div class="scroll"><table style="min-width:620px"><thead><tr><th>Adresse e-mail</th><th>Nom</th><th>Peut modifier</th><th>Ajouté par</th><th></th></tr></thead><tbody>
-    ${night.editors.map(e=>`<tr data-email="${esc(e.email)}"><td>${esc(e.email)}</td><td>${esc(e.name||"")}</td><td><label class="chips"><input type="checkbox" class="edcan"${e.can_edit?" checked":""}> Oui</label></td><td class="muted">${esc(e.added_by||"")}${e.added_at?` · ${new Date(e.added_at).toLocaleDateString("fr-FR")}`:""}</td><td><div class="acts"><button type="button" class="edupd">Enregistrer</button><button type="button" class="eddel">Retirer</button></div><div class="msg"></div></td></tr>`).join("")}
+    ${night.editors.map(e=>`<tr data-email="${esc(e.email)}"><td>${esc(e.email)}</td><td>${esc(e.name||"")}</td><td><label class="chips"><input type="checkbox" class="edcan"${e.can_edit?" checked":""}> Oui</label></td><td class="muted">${esc(e.added_by||"")}${e.added_at?` · ${new Date(e.added_at).toLocaleDateString("fr-FR")}`:""}</td><td><div class="acts"><button type="button" class="edupd" hidden>Enregistrer</button><button type="button" class="eddel">Retirer</button></div><div class="msg"></div></td></tr>`).join("")}
     <tr class="edadd"><td><input type="text" class="edmail" placeholder="prenom.nom@saf-helico.com" aria-label="Adresse e-mail du nouvel utilisateur" style="width:100%;min-width:220px"></td><td><input type="text" class="edname" placeholder="Facultatif" aria-label="Nom"></td><td><label class="chips"><input type="checkbox" class="edcan" checked> Oui</label></td><td></td><td><button type="button" class="go edsave">Ajouter</button><div class="msg"></div></td></tr>
     </tbody></table></div>`;
   }
@@ -1561,7 +1561,12 @@ function syncExForm(row){
   row.querySelectorAll(".exother").forEach(el=>el.hidden=v!=="other");
 }
 function nMsg(cell,text,ok){ const m=cell.querySelector(".msg"); if(m){ m.textContent=text; m.className="msg "+(ok?"ok":"err"); } }
-async function afterNightWrite(){ await loadNight(); renderNight(); render(lastPs); }
+async function afterNightWrite(){
+  await loadNight();
+  const a=document.activeElement, busy=a&&a.closest&&a.closest("#n-body")&&a.matches("input[type=text],input[type=number],input[type=date]");
+  if(!busy) renderNight();   // ne pas effacer une saisie en cours ailleurs dans le panneau
+  render(lastPs);
+}
 
 document.getElementById("nightbtn").onclick=openNight;
 document.getElementById("n-close").onclick=closeNight;
@@ -1575,14 +1580,43 @@ document.getElementById("n-body").addEventListener("change",e=>{
       t.disabled=false; if(error){ t.checked=!t.checked; nMsg(tr,error.message,false); } else nMsg(tr,t.checked?"Recevra les alertes":"Ne recevra plus les alertes",true);
     });
   }
-  if(t.classList.contains("home")){ // la base d'affectation ne peut pas être aussi base de repli
-    t.closest("tr").querySelectorAll(".alt").forEach(c=>{ if(c.value===t.value) c.checked=false; });
+  if(t.classList.contains("home")){ // la base d'affectation est acceptée d'office : sa case est cochée et grisée
+    t.closest("tr").querySelectorAll(".alt").forEach(c=>{
+      if(c.dataset.home){ delete c.dataset.home; c.disabled=!canEdit(); c.checked=false; c.parentElement.removeAttribute("title"); }
+      if(c.value===t.value){ c.dataset.home="1"; c.checked=true; c.disabled=true; c.parentElement.title="Base d’affectation : toujours acceptée"; }
+    });
   }
   if(t.classList.contains("snap")&&t.value){
     const l=state[t.value]?.last, tr=t.closest("tr");
-    if(l){ (tr.querySelector(".blat")||tr.querySelector(".balat")).value=fmtC(l.lat); (tr.querySelector(".blon")||tr.querySelector(".balon")).value=fmtC(l.lon); nMsg(tr,`Position de ${t.value} reprise (${hhmm(l.fix_time)}) : enregistrer pour valider.`,true); }
+    if(l){ (tr.querySelector(".blat")||tr.querySelector(".balat")).value=fmtC(l.lat); (tr.querySelector(".blon")||tr.querySelector(".balon")).value=fmtC(l.lon);
+      if(tr.dataset.code) autoSave(tr,".bsave"); else nMsg(tr,`Position de ${t.value} reprise (${hhmm(l.fix_time)}) : cliquez « Ajouter la base » pour valider.`,true); }
     t.value="";
   }
+});
+// Enregistrement automatique : chaque modification d'une ligne existante est envoyée après une courte pause
+const autoTimers=new Map();
+function autoSave(tr,sel){
+  if(!canEdit()||!tr) return;
+  const key=tr.dataset.reg||tr.dataset.code||tr.dataset.email;
+  clearTimeout(autoTimers.get(key));
+  nMsg(tr,"Enregistrement…",true);
+  autoTimers.set(key,setTimeout(function run(){
+    // on attend que la saisie dans la ligne soit terminée (ex. latitude puis longitude)
+    const a=document.activeElement;
+    if(a&&tr.contains(a)&&a.matches("input[type=text],input[type=number]")){ autoTimers.set(key,setTimeout(run,700)); return; }
+    autoTimers.delete(key);
+    const b=tr.querySelector(sel); if(b&&document.body.contains(b)) b.click();
+  },500));
+}
+document.getElementById("n-body").addEventListener("change",e=>{
+  const t=e.target, tr=t.closest("tr"); if(!tr||!canEdit()) return;
+  if(tr.dataset.reg&&!tr.classList.contains("exrow")&&t.matches(".home,.alt,.maint")) autoSave(tr,".save");
+  else if(tr.dataset.code&&t.matches(".blat,.blon,.brad")) autoSave(tr,".bsave");
+  else if(tr.dataset.email&&t.matches(".edcan")) autoSave(tr,".edupd");
+});
+document.getElementById("n-body").addEventListener("focusout",e=>{
+  const tr=e.target.closest&&e.target.closest("tr[data-code]");
+  if(tr&&!tr.contains(e.relatedTarget)&&autoTimers.has(tr.dataset.code)){ clearTimeout(autoTimers.get(tr.dataset.code)); autoTimers.delete(tr.dataset.code); tr.querySelector(".bsave")?.click(); }
 });
 document.getElementById("n-body").addEventListener("click",async e=>{
   const btn=e.target.closest("button"); if(!btn) return;
@@ -1627,7 +1661,7 @@ document.getElementById("n-body").addEventListener("click",async e=>{
       const {error}=await sb.from("fleet_b3_users").update({can_edit}).eq("email",email);
       if(error) throw error;
       await afterNightWrite();
-      const row=document.querySelector(`#n-body tr[data-email="${CSS.escape(email)}"]`); if(row) nMsg(row,"Enregistré",true);
+      const row=document.querySelector(`#n-body tr[data-email="${CSS.escape(email)}"]`); if(row) nMsg(row,"Enregistré automatiquement",true);
       return;
     }
     if(btn.classList.contains("eddel")){
@@ -1644,7 +1678,7 @@ document.getElementById("n-body").addEventListener("click",async e=>{
       const {error}=await sb.rpc("fleet_set_assignment",{p_reg:reg,p_home:home||null,p_alts:alts,p_maint:tr.querySelector(".maint").checked});
       if(error) throw error;
       await afterNightWrite();
-      const row=document.querySelector(`#n-body tr[data-reg="${CSS.escape(reg)}"]:not(.exrow)`); if(row) nMsg(row,"Enregistré",true);
+      const row=document.querySelector(`#n-body tr[data-reg="${CSS.escape(reg)}"]:not(.exrow)`); if(row) nMsg(row,"Enregistré automatiquement",true);
       return;
     }
     if(btn.classList.contains("exsave")){
@@ -1710,7 +1744,7 @@ document.getElementById("n-body").addEventListener("click",async e=>{
       if(error) throw error;
       if(!data||!data.length) throw new Error("Modification refusée par la base (droits).");
       await afterNightWrite();
-      const row=document.querySelector(`#n-body tr[data-code="${CSS.escape(code)}"]`); if(row) nMsg(row,"Enregistré",true);
+      const row=document.querySelector(`#n-body tr[data-code="${CSS.escape(code)}"]`); if(row) nMsg(row,"Enregistré automatiquement",true);
       return;
     }
   }catch(err){
