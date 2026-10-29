@@ -357,7 +357,7 @@ header .org{margin:2px 0 0;color:var(--ink-2);font-size:13px}
   <div class="nbar">
     <h2 id="n-title">Bases et contrôle de nuit</h2>
     <span id="n-who" class="muted" style="font-size:13px;color:var(--ink-2)"></span>
-    <p>Chaque soir, 15 min après le début de la nuit aéronautique (coucher du soleil + 30 min à la base d’affectation), le système vérifie que chaque AS 350 B3 est sur l’une des bases SAF ou sur le lieu de nuit autorisé. Sinon, une simple notification signale que l’appareil stationne hors base, aux destinataires qui voient cet appareil.</p>
+    <p>Chaque soir, 30 min après le début de la nuit aéronautique (coucher du soleil + 30 min à la base d’affectation), le système vérifie que chaque AS 350 B3 est sur l’une des bases SAF ou sur le lieu de nuit autorisé. Sinon, une simple notification signale que l’appareil stationne hors base, aux destinataires qui voient cet appareil.</p>
     <button type="button" id="n-close">Fermer</button>
   </div>
   <div class="nbody" id="n-body"></div>
@@ -1379,7 +1379,7 @@ function resetNightPanel(){
 const canEdit=()=>fleetEditor;
 const isAdmin=()=>fleetAdmin;
 const night={loaded:false,off:false,bases:[],asg:{},checks:[],ex:[],editors:[],sig:""};
-const NIGHT_MARGIN_MIN=15;
+const NIGHT_MARGIN_MIN=30;
 const baseBy=code=>night.bases.find(b=>b.code===code);
 const dayShift=(day,n)=>new Date(Date.parse(day+"T12:00:00Z")+n*864e5).toISOString().slice(0,10);
 const dmyDay=d=>d.split("-").reverse().join("/");
@@ -1586,17 +1586,16 @@ function renderNight(){
     const t=night.lastTest, tlog=t&&Array.isArray(t.send_log)?t.send_log.filter(l=>l.event==="open").slice(-1)[0]:null;
     const pushOk=new Set(((tlog&&tlog.push&&tlog.push.results)||[]).filter(r=>r.ok).map(r=>r.email));
     const lvl=(v,sel)=>`<option value="${v}"${sel==v?" selected":""}>${v===1?"1 · immédiat":v===2?"2 · +15 min":"3 · +30 min"}</option>`;
-    h+=`<h3>Destinataires des alertes</h3><p class="hint">Chaque destinataire reçoit les alertes des appareils qu’il voit (bases attribuées), par e-mail et sur les téléphones où il a activé les alertes. Niveau 1 : dès l’alerte. Niveaux 2 et 3 : seulement si une perte de signal en vol n’est pas prise en compte après 15 puis 30 min. Les notifications de nuit, traceur muet et système vont au niveau 1. Enregistrement automatique.</p>
-    <div class="scroll"><table style="min-width:720px"><thead><tr><th>Personne</th><th>Niveau</th><th>E-mail</th><th>Téléphone</th><th>Dernier test</th><th></th></tr></thead><tbody>
+    h+=`<h3>Destinataires des alertes</h3><p class="hint">Chaque destinataire reçoit, sous forme de notifications, les alertes des appareils qu’il voit (bases attribuées), sur les téléphones et tablettes où il a activé les alertes. Niveau 1 : dès l’alerte. Niveaux 2 et 3 : seulement si une perte de signal en vol n’est pas prise en compte après 15 puis 30 min. Les notifications de nuit, traceur muet et système vont au niveau 1. Enregistrement automatique.</p>
+    <div class="scroll"><table style="min-width:720px"><thead><tr><th>Personne</th><th>Niveau</th><th>Notifications</th><th>Dernier test</th><th></th></tr></thead><tbody>
     ${(night.recips||[]).map(r=>{ const d=devs[r.email]; return `<tr data-rcp="${esc(r.email)}"><td>${esc(r.name||r.email)}<div class="muted">${esc(r.email)}</div></td>
       <td><select class="rlvl">${[1,2,3].map(v=>lvl(v,r.level)).join("")}</select></td>
-      <td><label class="chips"><input type="checkbox" class="rmail"${r.by_email?" checked":""}> Oui</label></td>
-      <td><label class="chips"><input type="checkbox" class="rpush"${r.by_push?" checked":""}> Oui</label><div class="muted">${d?`${d.devices} appareil${d.devices>1?"s":""}`:"aucun téléphone activé"}</div></td>
-      <td class="muted">${!t?"—":!r.by_push?"—":pushOk.has(r.email)?"reçu sur téléphone":"non reçu sur téléphone"}</td>
+      <td><label class="chips"><input type="checkbox" class="rpush"${r.by_push?" checked":""}> Oui</label><div class="muted">${d?`${d.devices} appareil${d.devices>1?"s":""} activé${d.devices>1?"s":""}`:"aucun appareil activé"}</div></td>
+      <td class="muted">${!t?"—":!r.by_push?"—":pushOk.has(r.email)?"reçu":"non reçu"}</td>
       <td><div class="acts"><button type="button" class="rupd" hidden>Enregistrer</button><button type="button" class="rdel">Retirer</button></div><div class="msg"></div></td></tr>`; }).join("")}
     <tr class="radd"><td><input type="text" class="rmailin" placeholder="prenom.nom@saf-helico.com" aria-label="Adresse e-mail" style="width:100%;min-width:200px"><input type="text" class="rname" placeholder="Nom" aria-label="Nom" style="margin-top:4px;width:100%"></td>
       <td><select class="rlvl">${[1,2,3].map(v=>lvl(v,1)).join("")}</select></td>
-      <td><label class="chips"><input type="checkbox" class="rmail" checked> Oui</label></td><td><label class="chips"><input type="checkbox" class="rpush" checked> Oui</label></td><td></td>
+      <td><label class="chips"><input type="checkbox" class="rpush" checked> Oui</label></td><td></td>
       <td><button type="button" class="go radd-go">Ajouter</button><div class="msg"></div></td></tr>
     </tbody></table></div>
     <p class="hint">Test automatique chaque lundi à 8 h UTC vers tous les destinataires. ${t?`Dernier test : ${new Date(t.opened_at).toLocaleString("fr-FR",{weekday:"long",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Paris"})} · ${t.ack_at?`réception confirmée par ${esc(t.ack_by)}`:"réception pas encore confirmée"}.`:"Aucun test encore envoyé."}</p>
@@ -1657,7 +1656,12 @@ async function loadAlerts(){
 }
 function alertLine(a){
   const d=a.details||{}, R=a.reg&&!["NSE","MiTrac"].includes(a.reg)?esc(a.reg)+" · ":"";
-  if(a.kind==="signal_lost") return `${R}dernier point ${hm(a.last_fix_time)} UTC (il y a ${dur(minsAgo(a.last_fix_time))})${d.speed_kmh?` · ${d.speed_kmh} km/h`:""}${Number.isFinite(+d.heading)?` · cap ${Math.round(d.heading)}°`:""}${a.level>1?` · escalade niveau ${a.level}`:""}`;
+  if(a.kind==="signal_lost"){
+    const spd=+d.speed_kmh||0, hdg=Number.isFinite(+d.heading)?Math.round(+d.heading):null;
+    const zone=spd>0&&hdg!=null?`<div class="muted">Zone prioritaire : axe ${String(hdg).padStart(3,"0")}° (${CARD[Math.round(hdg/45)%8]}), jusqu’à ${(spd*2/60).toFixed(1)} km du dernier point (2 min de vol).</div>`:"";
+    const prev=Array.isArray(d.prev)&&d.prev.length?`<div class="muted">Derniers points : ${d.prev.map(p=>`${hm(p.t)} · ${Math.round(+p.alt*3.28084)} ft · ${p.spd} km/h`).join(" | ")}</div>`:"";
+    return `${R}dernier point ${hm(a.last_fix_time)} UTC (il y a ${dur(minsAgo(a.last_fix_time))})${a.lat!=null?` · ${(+a.lat).toFixed(4)}, ${(+a.lon).toFixed(4)}`:""}${spd?` · ${spd} km/h`:""}${hdg!=null?` · cap ${hdg}°`:""}${a.level>1?` · escalade niveau ${a.level}`:""}${zone}${prev}`;
+  }
   if(a.kind==="source_down") return `${esc(a.reg||"")} depuis ${hm(a.opened_at)} UTC`;
   if(a.kind==="relay_down") return `depuis ${hm(a.opened_at)} UTC : positions non à jour`;
   if(a.kind==="test") return `envoyé ${new Date(a.opened_at).toLocaleString("fr-FR",{weekday:"long",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Paris"})} : confirmez la réception`;
@@ -1762,7 +1766,7 @@ document.getElementById("n-body").addEventListener("change",e=>{
   if(tr.dataset.reg&&!tr.classList.contains("exrow")&&t.matches(".home,.maint")) autoSave(tr,".save");
   else if(tr.dataset.code&&t.matches(".blat,.blon,.brad")) autoSave(tr,".bsave");
   else if(tr.dataset.email&&t.matches(".edcan,.edadm,.edbase,.edshr")) autoSave(tr,".edupd");
-  else if(tr.dataset.rcp&&t.matches(".rlvl,.rmail,.rpush")) autoSave(tr,".rupd");
+  else if(tr.dataset.rcp&&t.matches(".rlvl,.rpush")) autoSave(tr,".rupd");
 });
 document.getElementById("n-body").addEventListener("focusout",e=>{
   const tr=e.target.closest&&e.target.closest("tr[data-code]");
@@ -1809,7 +1813,7 @@ document.getElementById("n-body").addEventListener("click",async e=>{
       return;
     }
     if(btn.classList.contains("rupd")){
-      const email=tr.dataset.rcp, upd={level:+tr.querySelector(".rlvl").value,by_email:tr.querySelector(".rmail").checked,by_push:tr.querySelector(".rpush").checked};
+      const email=tr.dataset.rcp, upd={level:+tr.querySelector(".rlvl").value,by_email:false,by_push:tr.querySelector(".rpush").checked};
       const {data,error}=await sb.from("fleet_b3_alert_recipients").update(upd).eq("email",email).select("email");
       if(error) throw error; if(!(data&&data.length)) throw new Error("Modification refusée (droits).");
       await afterNightWrite();
@@ -1828,7 +1832,7 @@ document.getElementById("n-body").addEventListener("click",async e=>{
     if(btn.classList.contains("radd-go")){
       const email=tr.querySelector(".rmailin").value.trim().toLowerCase(), name=tr.querySelector(".rname").value.trim()||null;
       if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("Adresse e-mail invalide.");
-      const rec={email,name,level:+tr.querySelector(".rlvl").value,by_email:tr.querySelector(".rmail").checked,by_push:tr.querySelector(".rpush").checked};
+      const rec={email,name,level:+tr.querySelector(".rlvl").value,by_email:false,by_push:tr.querySelector(".rpush").checked};
       const {error}=await sb.from("fleet_b3_alert_recipients").upsert(rec,{onConflict:"email"});
       if(error) throw error;
       await afterNightWrite();
