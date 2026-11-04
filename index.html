@@ -1689,7 +1689,7 @@ function auditHTML(){
 }
 
 /* ---------- Alertes en cours et prise en compte ---------- */
-const ALERT_LABEL={signal_lost:"Plus de signal en vol",relay_down:"Relais de suivi arrêté",source_down:"Source de positions indisponible",tracker_silent:"Traceur muet",test:"Test hebdomadaire des alertes",night_out:"Stationne hors base cette nuit",night_unverified:"Position de nuit inconnue"};
+const ALERT_LABEL={signal_lost:"Plus de signal en vol",relay_down:"Relais de suivi arrêté",source_down:"Source de positions indisponible",tracker_silent:"Traceur muet",tracker_static:"Immobile depuis 7 jours",test:"Test hebdomadaire des alertes",night_out:"Stationne hors base cette nuit",night_unverified:"Position de nuit inconnue"};
 let openAlerts=[], alertFocus=null, alertFocusRow=null;
 async function loadAlerts(){
   const since=new Date(Date.now()-36*3600e3).toISOString();
