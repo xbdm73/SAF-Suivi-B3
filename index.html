@@ -89,6 +89,12 @@ header p{margin:4px 0 0;color:var(--ink-2);font-size:13px}
 
 .ac .facts{font-size:13px;margin-top:8px;display:grid;gap:2px}
 .ac .facts b{font-weight:600}
+.ac .pos{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px}
+.ac .pos .k{color:var(--ink-2)}
+.ac .pos .v{font-variant-numeric:tabular-nums;letter-spacing:.01em;white-space:nowrap}
+.ac .pos button{margin-left:auto;font:inherit;font-size:12px;color:var(--ink-2);background:transparent;border:1px solid var(--line);border-radius:4px;padding:2px 8px;cursor:pointer}
+.ac .pos button:hover{color:var(--ink);border-color:var(--ink-2)}
+.ac .pos button.ok{color:var(--live);border-color:var(--live)}
 .ac .more{margin-top:8px;font-size:12px;color:var(--gold)}
 .det{margin-top:12px;border-top:1px solid var(--line);padding-top:4px;font-size:13px;cursor:default}
 .det h3{font-family:var(--cond);font-size:15px;font-weight:600;margin:12px 0 4px;color:var(--signal)}
@@ -681,6 +687,14 @@ function arrowSvg(color,heading){
   </svg></span>`;
 }
 const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+/* Coordonnées en degrés minutes décimales, ex. 45°37.66'N 006°19.78'E (minutes à 2 décimales, ≈ 18 m) */
+function ddmPart(v,deg3,pos,neg){
+  const h=v<0?neg:pos, a=Math.abs(v);
+  let d=Math.floor(a), m=Math.round((a-d)*6000)/100;
+  if(m>=60){ m=0; d+=1; }                       // retenue : 59.995' → 60.00' → degré suivant
+  return String(d).padStart(deg3?3:2,"0")+"°"+m.toFixed(2).padStart(5,"0")+"'"+h;
+}
+const ddm=(lat,lon)=>ddmPart(lat,false,"N","S")+" "+ddmPart(lon,true,"E","W");
 
 /* ---------- Référentiel aérodromes (distance à vol d'oiseau, coordonnées approchées) ---------- */
 // metar:true = aérodrome publiant un METAR
@@ -1264,6 +1278,7 @@ function render(ps){
         <div><dt>${gs!=null?"Vit. sol calc.":"Vitesse (brute)"}</dt><dd>${gs!=null?Math.round(gs/1.852)+' <small>kt</small>':esc(last.speed)}</dd></div>
       </dl>
       <div class="facts">${facts}</div>
+      <div class="pos"><span class="k">Position</span><span class="v">${ddm(last.lat,last.lon)}</span><button type="button" class="cp" title="Copier les coordonnées">Copier</button></div>
       <div class="when">Dernier point ${hhmm(last.fix_time)} – ${ago(last.fix_time)}</div>
       ${selected===a.reg?detailsHTML(a.reg):`<div class="more">Afficher vols et météo</div>`}`:`<div class="facts">${nightFacts(a,null)}</div>`}
     </div>`;
@@ -1278,7 +1293,15 @@ function render(ps){
         else p.map.setView([last.lat,last.lon],Math.max(p.map.getZoom(),11)); }
       render(lastPs); ensureDetails(a.reg);
     };
-    li.onclick=e=>{ if(e.target.closest(".det")) return; go(); };
+    li.onclick=e=>{
+      const cp=e.target.closest(".cp");
+      if(cp){ e.stopPropagation(); const txt=a.reg+" "+ddm(last.lat,last.lon)+" ("+hhmm(last.fix_time)+")";
+        const done=()=>{ cp.textContent="Copié"; cp.classList.add("ok"); };
+        (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(done).catch(()=>{
+          const t=document.createElement("textarea"); t.value=txt; document.body.appendChild(t); t.select();
+          try{ document.execCommand("copy"); done(); }catch(_){} t.remove(); });
+        return; }
+      if(e.target.closest(".det")) return; go(); };
     li.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};
     if(shown) list.appendChild(li);
 
