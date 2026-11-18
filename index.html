@@ -468,6 +468,8 @@ const CONFIG = {
   liveMaxMin: 5,        // point plus récent que 5 min = en direct
   lostAfterMin: 45,     // en mouvement puis plus de point depuis 45 min = signal perdu
   movingSpeed: 5,
+  groundDriftKmh: 30,   // sous cette vitesse brute, un point immobile (< 50 m du précédent) est considéré au sol
+  landedMaxKmh: 60,     // dernier point sous cette vitesse près d'un aérodrome/base + traceur muet = posé
   // Mise en route : le traceur (alimenté par l'appareil) émet de nouveau après au moins gapMin de silence.
   // Une carte ne s'ouvre que si cette reprise date de moins de recentMin (pas de rattrapage d'anciens vols).
   startGapMin: 20,
@@ -557,7 +559,7 @@ function setSplit(n){
 }
 function predictionBounds(reg){
   const s=state[reg],last=s?.last;
-  if(!last || status(last).k!=="live")return null;
+  if(!last || status(last,s.prev).k!=="live")return null;
   const kt=currentKt(s.prev,last);
   if(!Number.isFinite(kt)||kt<=0)return null;
   const radius=predictionRadiusKm(kt,30)*1000;
@@ -593,7 +595,7 @@ function paneBars(){
     p.sel.value=p.follow||"";
     if(p.follow){
       const a=fleet.find(x=>x.reg===p.follow), last=state[p.follow]?.last;
-      const st=a&&a.active?status(last):{k:"none",t:"Suivi non activé"};
+      const st=a&&a.active?status(last,state[p.follow]?.prev):{k:"none",t:"Suivi non activé"};
       p.pst.dataset.st=st.k;
       p.pst.innerHTML=`<b>${esc(st.t)}</b>${last?` · ${esc(ago(last.fix_time))}`:""}${p.autoAt?` · <span class="auto">ouverte à la mise en route</span>`:""}`;
     } else { p.pst.dataset.st=""; p.pst.textContent=""; }
@@ -708,9 +710,18 @@ function renderPrediction(pane,reg,last,prev,st){
     color:"#001F54",weight:5,opacity:1,interactive:false
   }).addTo(group);
 }
-function status(last){
+function status(last,prev){
   if(!last) return {k:"none",t:"Aucune position reçue"};
-  const m=minsAgo(last.fix_time), moving=(last.speed??0)>CONFIG.movingSpeed;
+  const m=minsAgo(last.fix_time), spd=Number(last.speed)||0;
+  let moving=spd>CONFIG.movingSpeed;
+  // Dérive GPS au sol : petite vitesse brute alors que la position n'a pas bougé depuis le point précédent.
+  if(moving && prev && spd<CONFIG.groundDriftKmh && haversineKm(prev,last)<0.05) moving=false;
+  // Dernier point émis pendant l'atterrissage puis traceur coupé avec l'appareil :
+  // plus de point depuis liveMaxMin, vitesse faible, et à moins de BASE_RADIUS_KM d'un aérodrome ou d'une base.
+  if(moving && m>CONFIG.liveMaxMin && spd<CONFIG.landedMaxKmh){
+    const n=nearestAds(last)[0];
+    if(n && n.km<BASE_RADIUS_KM) return {k:"stale",t:`Posé à ${adName(n.ad)} – traceur éteint`};
+  }
   if(moving && m>CONFIG.lostAfterMin) return {k:"lost",t:`Signal perdu en vol – ${ago(last.fix_time)}`};
   if(moving) return {k:"live",t:m<=CONFIG.liveMaxMin?"En vol":"En vol – dernier point "+ago(last.fix_time)};
   if(m<=CONFIG.liveMaxMin) return {k:"ground",t:"Au sol, traceur actif"};
@@ -1300,7 +1311,7 @@ function render(ps){
   const stackCount={}; // appareils posés au même endroit (~100 m) : étiquettes empilées
 
   for(const a of fleet){
-    const s=state[a.reg], last=s.last, st=a.active?status(last):{k:"none",t:"Suivi non activé ("+a.provider+")"};
+    const s=state[a.reg], last=s.last, st=a.active?status(last,s.prev):{k:"none",t:"Suivi non activé ("+a.provider+")"};
     const shown=passFilter(a);
     if(shown){ nShown++; if(st.k==="live") nLive++; if(st.k==="lost") nLost++; }
     const hd=last?normHeading(last.heading):null;
@@ -1455,7 +1466,7 @@ function openAuto(a,start){
     // Une carte qui suit un appareil en vol ou en perte de signal n'est jamais remplacée.
     const rank=x=>{
       if(!x.follow) return x.i>0?2:4;
-      const k=status(state[x.follow]?.last).k;
+      const k=status(state[x.follow]?.last,state[x.follow]?.prev).k;
       if(k==="none"||k==="stale") return 1;
       if(k==="ground") return x.autoAt?3:5;
       return 99;
